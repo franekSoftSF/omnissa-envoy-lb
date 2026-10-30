@@ -126,6 +126,13 @@ def primary_address(iface: str, exclude: list[str] | None = None) -> dict | None
     return None
 
 
+def interface_cidrs(iface: str) -> dict[str, int]:
+    for i in list_interfaces():
+        if i["name"] == iface:
+            return {a["address"]: a["prefix"] for a in i["addresses"]}
+    return {}
+
+
 def interface_addresses(iface: str) -> list[str]:
     for i in list_interfaces():
         if i["name"] == iface:

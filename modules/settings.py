@@ -354,8 +354,8 @@ def validate(cfg: dict) -> None:
         _err(errors, "envoy.log_level: trace|debug|info|warning|error|critical|off")
     try:
         ip = ipaddress.ip_address(str(env["admin_address"]))
-        if not ip.is_loopback:
-            _err(errors, "envoy.admin_address: interfejs administracyjny Envoy musi być na adresie loopback")
+        if ip.version != 4 or not ip.is_loopback:
+            _err(errors, "envoy.admin_address: interfejs administracyjny Envoy musi być na adresie loopback IPv4 (127.0.0.0/8)")
     except ValueError:
         _err(errors, "envoy.admin_address: nieprawidłowy adres")
     for k in ("admin_port", "drain_seconds", "max_connections_per_cluster", "max_downstream_connections", "concurrency"):
@@ -381,7 +381,8 @@ def validate(cfg: dict) -> None:
         _err(errors, "firewall.backend: auto | nftables | ufw")
     for src in fw.get("allowed_sources") or []:
         try:
-            ipaddress.ip_network(str(src), strict=False)
+            if ipaddress.ip_network(str(src), strict=False).version != 4:
+                _err(errors, f"firewall.allowed_sources: obsługiwane są sieci IPv4 (VIP są IPv4), podano {src!r}")
         except ValueError:
             _err(errors, f"firewall.allowed_sources: nieprawidłowa sieć {src!r}")
     if not fw.get("allowed_sources"):

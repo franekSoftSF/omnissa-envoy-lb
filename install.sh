@@ -574,7 +574,6 @@ detect_os() {
 detect_apt_proxy() {
   APT_PROXY="$(apt-config dump 2>/dev/null | sed -n -E 's/^Acquire::https?::Proxy "([^"]+)";$/\1/p' | head -n1 || true)"
   [[ "$APT_PROXY" == DIRECT || "$APT_PROXY" == false ]] && APT_PROXY=""
-DRYRUN_ISSUES=()
   [[ -n "$APT_PROXY" ]] && info "Wykryto proxy APT - zostanie użyte także do testów łączności" || true
 }
 

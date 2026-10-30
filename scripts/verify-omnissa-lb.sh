@@ -83,7 +83,7 @@ for svc in $OLB_SERVICES; do
   check "vip:${svc}" 1 "$([[ "$on_if" == yes ]] && echo 0 || echo 1)" "VIP ${vip} na ${OLB_INTERFACE}"
   check "vip:${svc}:unique" 1 "$([[ "$count" -le 1 ]] && echo 0 || echo 1)" "VIP ${vip} skonfigurowany ${count}x (bez duplikatów)"
   for port in ${!tcp_var}; do
-    check "listen:${svc}:tcp/${port}" 1 "$(ss -Hlnt "sport = :${port}" | awk '{print $4}' | grep -qF "${vip}:${port}" && echo 0 || echo 1)" "TCP ${vip}:${port}"
+    check "listen:${svc}:tcp/${port}" 1 "$(ss -Hlnt "sport = :${port}" | awk -v a="${vip}:${port}" '$4 == a {f=1} END {exit !f}' && echo 0 || echo 1)" "TCP ${vip}:${port}"
     if [[ "$OLB_SNI_CHECK" != skip ]]; then
       probe="$fqdn"; [[ "$probe" == \*.* ]] && probe="probe${probe#\*}"
       out="$(timeout 8 openssl s_client -connect "${vip}:${port}" -servername "$probe" -brief </dev/null 2>&1 || true)"
@@ -92,7 +92,7 @@ for svc in $OLB_SERVICES; do
     fi
   done
   for port in ${!udp_var}; do
-    check "listen:${svc}:udp/${port}" 1 "$(ss -Hlnu "sport = :${port}" | awk '{print $4}' | grep -qF "${vip}:${port}" && echo 0 || echo 1)" "UDP ${vip}:${port}"
+    check "listen:${svc}:udp/${port}" 1 "$(ss -Hlnu "sport = :${port}" | awk -v a="${vip}:${port}" '$4 == a {f=1} END {exit !f}' && echo 0 || echo 1)" "UDP ${vip}:${port}"
   done
   if command -v dig >/dev/null; then
     res="$(dig +short +time=2 +tries=1 "$fqdn" A 2>/dev/null | tr '\n' ' ')"

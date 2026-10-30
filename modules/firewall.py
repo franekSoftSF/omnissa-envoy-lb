@@ -69,6 +69,7 @@ def render_nft(cfg: dict) -> str:
         "  }",
         "  chain input {",
         "    type filter hook input priority filter - 5; policy accept;",
+        "    meta nfproto != ipv4 return",  # IPv6 (SSH, NDP) nie jest objęte regułami VIP
         "    ip daddr != @vips return",
         "    ct state established,related accept",
         "    ct state invalid drop",
@@ -104,6 +105,7 @@ def apply(ctx: Context, cfg: dict) -> dict:
     prev_backend = state.get("firewall_backend")
     if prev_backend and prev_backend != backend:
         remove(ctx, prev_backend)
+        state = State()  # remove() zapisał własny stan - unikamy nadpisania nieaktualną kopią
 
     if backend == "nftables":
         if not which("nft"):

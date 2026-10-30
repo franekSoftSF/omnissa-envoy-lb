@@ -70,6 +70,10 @@ envoy: {admin_address: 0.0.0.0}
         with self.assertRaisesRegex(OmnissaError, "SNI"):
             settings.load(p)
 
+    def test_admin_must_be_ipv4_loopback(self):
+        with self.assertRaisesRegex(OmnissaError, "loopback IPv4"):
+            settings.load(write_cfg(BASE + "envoy: {admin_address: '::1'}\n"))
+
     def test_duration(self):
         self.assertEqual(settings.duration("500ms", "x"), "0.5s")
         self.assertEqual(settings.duration("2m", "x"), "120s")

@@ -6,3 +6,4 @@ venv/
 config/settings.yaml
 *.log
 *.tar.gz
+dist/

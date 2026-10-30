@@ -115,11 +115,23 @@ def run_wizard(output: Path, base: Path | None = None, interface: str | None = N
         if not s["enabled"]:
             continue
         s["fqdn"] = _ask(f"FQDN {label}", s.get("fqdn"))
-        cur_ports = ",".join(f"{l['protocol']}/{l['port']}" for l in s.get("listeners") or []) or defports
-        s["listeners"] = _ports(_ask(f"Listenery {label} (proto/port, przecinki)", cur_ports, _ports_valid))
-        cur_b = " ".join(b if isinstance(b, str) else b["address"] for b in s.get("backends") or [])
-        s["backends"] = [{"address": a} for a in _ask(f"Backendy {label} (IP/FQDN węzłów UAG)", cur_b or None, _ips)
-                         .replace(",", " ").split()]
+        old_l = {(l["protocol"], l["port"]): l for l in s.get("listeners") or []}
+        cur_ports = ",".join(f"{p}/{n}" for p, n in old_l) or defports
+        s["listeners"] = []
+        for l in _ports(_ask(f"Listenery {label} (proto/port, przecinki)", cur_ports, _ports_valid)):
+            prev = old_l.get((l["protocol"], l["port"]))
+            if prev and prev.get("backend_port"):
+                l["backend_port"] = prev["backend_port"]  # zachowanie mapowania portu backendu
+            s["listeners"].append(l)
+        old_b = {(b if isinstance(b, str) else b["address"]): ({} if isinstance(b, str) else b)
+                 for b in s.get("backends") or []}
+        cur_b = " ".join(old_b)
+        s["backends"] = []
+        for a in _ask(f"Backendy {label} (IP/FQDN węzłów UAG)", cur_b or None, _ips).replace(",", " ").split():
+            entry = {"address": a}
+            if old_b.get(a, {}).get("weight"):
+                entry["weight"] = old_b[a]["weight"]  # zachowanie wag
+            s["backends"].append(entry)
         if mode == "dedicated":
             cur["vip"][svc] = _ask(f"VIP {label}", cur["vip"].get(svc), _ip)
     if mode == "shared":

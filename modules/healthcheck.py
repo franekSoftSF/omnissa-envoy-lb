@@ -97,15 +97,16 @@ def run_checks(cfg: dict, wait_for_health: int = 30) -> Results:
     # Backendy (aktywne health checki Envoy) - z oczekiwaniem na pierwsze wyniki
     if val["backend_check"] != "skip":
         crit = val["backend_check"] == "critical"
+        clusters = envoy_config.build_model(cfg)["clusters"]
+        names = {c["name"] for c in clusters}
         deadline = time.time() + wait_for_health
         while True:
             health = envoy_config.cluster_health(cfg)
-            pending = [c for c in health if c in {cl["name"] for cl in envoy_config.build_model(cfg)["clusters"]}
-                       and not any(h["healthy"] for h in health[c])]
+            pending = [c for c in names if not any(h["healthy"] for h in health.get(c, []))]
             if not pending or time.time() > deadline:
                 break
             time.sleep(3)
-        for c in envoy_config.build_model(cfg)["clusters"]:
+        for c in clusters:
             hosts = health.get(c["name"], [])
             healthy = [h["host"] for h in hosts if h["healthy"]]
             res.add(f"backend:{c['name']}", bool(healthy), crit,

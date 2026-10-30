@@ -34,7 +34,7 @@ def reconcile(ctx: Context, cfg: dict, iface: str) -> dict:
     managed = state.get("managed_vips", [])
     want = desired(cfg, iface)
     want_addrs = {v for v, _ in want}
-    current = net.interface_addresses(iface)
+    current = net.interface_cidrs(iface)
     primary = net.primary_address(iface, exclude=list(want_addrs) + [m["address"] for m in managed])
     report = {"interface": iface, "primary": primary["address"] if primary else None, "added": [], "present": [], "removed": []}
 
@@ -45,10 +45,24 @@ def reconcile(ctx: Context, cfg: dict, iface: str) -> dict:
         owner = net.address_owner(vip)
         if owner and owner != iface:
             raise OmnissaError(f"Adres {vip} jest już skonfigurowany na innym interfejsie ({owner})", EXIT_DEPLOY)
-        if vip in current:
-            log.info("VIP %s już obecny na %s - pomijam", vip, iface)
+        if vip in current and current[vip] == prefix:
+            log.info("VIP %s/%s już obecny na %s - pomijam", vip, prefix, iface)
             report["present"].append(vip)
             continue
+        if vip in current:
+            if not any(m["address"] == vip for m in managed):
+                raise OmnissaError(
+                    f"Adres {vip}/{current[vip]} na {iface} nie został dodany przez instalator, "
+                    f"a konfiguracja wymaga maski /{prefix}",
+                    EXIT_DEPLOY,
+                    hint="Usuń adres ręcznie lub dostosuj vip.prefix",
+                )
+            old = f"{vip}/{current[vip]}"
+            ctx.plan("vip", "change-prefix", address=old, new=f"{vip}/{prefix}", interface=iface)
+            if not ctx.dry_run:
+                run(["ip", "addr", "del", old, "dev", iface])
+                ctx.transaction.record("vip_removed", iface, old)
+            report["removed"].append(old)
         if cfg["vip"].get("duplicate_check", True) and duplicate_in_use(iface, vip):
             raise OmnissaError(
                 f"Adres VIP {vip} odpowiada w sieci (używany przez inne urządzenie) - przerwano",
@@ -73,12 +87,16 @@ def reconcile(ctx: Context, cfg: dict, iface: str) -> dict:
                 run(["ip", "addr", "del", m["cidr"], "dev", m["interface"]], check=False)
                 ctx.transaction.record("vip_removed", m["interface"], m["cidr"])
             report["removed"].append(m["cidr"])
-    preexisting = set(state.get("preexisting_vips", []))
+    preexisting = set(state.get("preexisting_vips", [])) & want_addrs
+    added = {c.split("/")[0] for c in report["added"]}
     for vip, prefix in want:
-        if vip in report["present"] and not any(m["address"] == vip for m in managed):
-            preexisting.add(vip)  # adres istniał przed instalatorem - nie przejmujemy go
-        elif vip not in preexisting:
+        if vip in added:
+            preexisting.discard(vip)  # dodany przez instalator - od teraz zarządzany
             keep.append({"address": vip, "cidr": f"{vip}/{prefix}", "interface": iface})
+        elif any(m["address"] == vip for m in managed):
+            keep.append({"address": vip, "cidr": f"{vip}/{prefix}", "interface": iface})
+        else:
+            preexisting.add(vip)  # adres istniał przed instalatorem - nie przejmujemy go
     state.set("managed_vips", keep)
     state.set("preexisting_vips", sorted(preexisting))
     state.set("interface", iface)
