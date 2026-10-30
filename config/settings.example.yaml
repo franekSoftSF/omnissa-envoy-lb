@@ -73,7 +73,7 @@ sni:
 envoy:
   version: ""                  # "" = najnowsza dostępna w repozytorium; "1.34.1" = przypięcie wersji
   source: apt                  # oficjalne repozytorium apt.envoyproxy.io (podpisane)
-  apt_suite: ""                # jawne nadpisanie suite repozytorium (NIE jest używane automatycznie)
+  apt_suite: ""                # "" = jammy (metoda projektu, także na 24.04/26.04); inny suite tylko świadomie
   apt_key_fingerprint: ""      # zalecane: przypięcie odcisku klucza repozytorium
   admin_address: 127.0.0.1     # tylko loopback
   admin_port: 9901

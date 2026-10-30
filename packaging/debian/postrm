@@ -1,0 +1,12 @@
+#!/bin/sh
+# postrm omnissa-envoy-lb: purge usuwa pliki wygenerowane w katalogu aplikacji (venv, cache).
+# Konfiguracja /etc/omnissa-lb, kopie zapasowe i certyfikaty nie są usuwane.
+set -e
+case "$1" in
+  purge)
+    rm -rf /opt/omnissa-envoy-lb/venv /opt/omnissa-envoy-lb/.install-info
+    find /opt/omnissa-envoy-lb -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+    rmdir --ignore-fail-on-non-empty /opt/omnissa-envoy-lb 2>/dev/null || true
+    ;;
+esac
+exit 0

@@ -12,6 +12,16 @@ Envoy Proxy. Działa na Ubuntu Server 24.04 / 26.04 i instaluje się jednym pole
 
 ## Szybki start
 
+Envoy instalowany jest z `apt.envoyproxy.io` (suite `jammy`, wpis `envoy.list`), zob.
+[docs/INSTALL.md](docs/INSTALL.md#metoda-instalacji-envoy). Narzędzie można zainstalować
+z repozytorium (poniżej) albo z paczki `.deb` (`bash packaging/build-deb.sh`):
+
+```bash
+sudo apt install ./dist/omnissa-envoy-lb_1.1.0_all.deb && sudo omnissa-lb-install
+```
+
+Instalacja z kopii repozytorium:
+
 ```bash
 sudo bash install.sh
 ```
@@ -57,6 +67,7 @@ omnissa-lb.py + modules/                 warstwa 2 (Python, venv /opt/omnissa-en
 config/                                  przykłady settings.yaml i szablon envoy.yaml
 systemd/                                 envoy.service + jednostki firewall/monitoringu
 scripts/verify-omnissa-lb.sh             niezależna weryfikacja
+packaging/                               budowa paczki .deb (build-deb.sh, debian/)
 tests/                                   testy jednostkowe (python3 -m unittest discover -s tests -t .)
 docs/                                    INSTALL, ARCHITECTURE, NETWORK, SECURITY, TROUBLESHOOTING
 ```

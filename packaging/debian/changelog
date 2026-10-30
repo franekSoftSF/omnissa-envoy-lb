@@ -1,0 +1,14 @@
+omnissa-envoy-lb (1.1.0) unstable; urgency=medium
+
+  * Envoy instalowany z apt.envoyproxy.io, suite jammy (także Ubuntu 24.04/26.04),
+    wpis /etc/apt/sources.list.d/envoy.list; migracja wpisu deb822 z 1.0.0.
+  * Paczka .deb narzędzia (polecenia omnissa-lb, omnissa-lb-install/-update/-uninstall).
+  * bind9-dnsutils zamiast pakietu przejściowego dnsutils.
+
+ -- Szymon Frankiewicz <szymonfrankiewicz@gmail.com>  Fri, 30 Oct 2026 14:00:00 +0000
+
+omnissa-envoy-lb (1.0.0) unstable; urgency=medium
+
+  * Pierwsze wydanie: instalator Bash, konfigurator Python, poprawki z przeglądu kodu.
+
+ -- Szymon Frankiewicz <szymonfrankiewicz@gmail.com>  Fri, 30 Oct 2026 13:30:00 +0000

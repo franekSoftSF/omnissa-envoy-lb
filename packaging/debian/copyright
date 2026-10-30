@@ -1,0 +1,8 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: omnissa-envoy-lb
+Source: https://github.com/franekSoftSF/omnissa-envoy-lb
+
+Files: *
+Copyright: 2026 Szymon Frankiewicz <szymonfrankiewicz@gmail.com>
+License: proprietary
+ Wszelkie prawa zastrzeżone. Licencję określa właściciel repozytorium.

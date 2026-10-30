@@ -1,0 +1,16 @@
+#!/bin/sh
+# prerm omnissa-envoy-lb: zatrzymuje wyłącznie timer monitoringu (korzysta z plików pakietu).
+# Envoy, VIP i firewall NIE są zmieniane - ruch produkcyjny nie zostaje przerwany.
+set -e
+case "$1" in
+  remove|deconfigure)
+    if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+      systemctl disable --now omnissa-lb-healthcheck.timer >/dev/null 2>&1 || true
+    fi
+    if [ -f /var/lib/omnissa-lb/state.json ]; then
+      echo "omnissa-envoy-lb: Envoy, VIP i reguły firewall pozostają aktywne."
+      echo "  Pełne usunięcie wdrożenia przed usunięciem pakietu: sudo omnissa-lb-uninstall"
+    fi
+    ;;
+esac
+exit 0

@@ -1,0 +1,19 @@
+Package: omnissa-envoy-lb
+Version: @VERSION@
+Section: net
+Priority: optional
+Architecture: all
+Maintainer: Szymon Frankiewicz <szymonfrankiewicz@gmail.com>
+Installed-Size: @SIZE@
+Depends: python3 (>= 3.12), python3-venv, ca-certificates, curl, gnupg, iproute2, iputils-ping, iputils-arping, bind9-dnsutils | dnsutils, netplan.io, openssl, jq, nftables | ufw, systemd
+Suggests: envoy
+Homepage: https://github.com/franekSoftSF/omnissa-envoy-lb
+Description: Omnissa Tunnel/SEG load balancer based on Envoy Proxy
+ Installer and configurator for an Envoy-based Layer 4 load balancer for
+ Omnissa Tunnel and Secure Email Gateway (TLS passthrough, SNI routing on a
+ shared VIP, TCP/UDP listeners, health checks, nftables/ufw firewall,
+ monitoring, backup and rollback).
+ .
+ The package ships the tool only. Envoy Proxy (apt.envoyproxy.io), the
+ Python virtual environment and the systemd service are set up by
+ "omnissa-lb-install".

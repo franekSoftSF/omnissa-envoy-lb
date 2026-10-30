@@ -92,8 +92,13 @@ done
 [[ -d "${SYSTEMD_DIR}/envoy.service.d" ]] && act "Usunięcie drop-in limitów" rm -f "${SYSTEMD_DIR}/envoy.service.d/10-omnissa-limits.conf"
 act "systemctl daemon-reload" systemctl daemon-reload
 
-# 4. Aplikacja
-act "Usunięcie ${APP_DIR}" rm -rf --one-file-system "$APP_DIR"
+# 4. Aplikacja (przy instalacji z paczki .deb pliki należą do dpkg - usuwa je apt)
+if dpkg-query -W -f='${Status}' omnissa-envoy-lb 2>/dev/null | grep -q 'install ok installed'; then
+  act "Usunięcie środowiska venv" rm -rf --one-file-system "${APP_DIR}/venv" "${APP_DIR}/.install-info"
+  log INFO "Pliki aplikacji należą do pakietu omnissa-envoy-lb - usuń go: sudo apt purge omnissa-envoy-lb"
+else
+  act "Usunięcie ${APP_DIR}" rm -rf --one-file-system "$APP_DIR"
+fi
 act "Usunięcie poleceń /usr/local/sbin" rm -f /usr/local/sbin/omnissa-lb /usr/local/sbin/verify-omnissa-lb
 
 # 5. Pakiet Envoy (tylko jeśli został zainstalowany przez instalator)
@@ -101,7 +106,7 @@ if [[ "$REMOVE_ENVOY" == 1 ]]; then
   if grep -qx envoy "${STATE_DIR}/installed-packages.txt" 2>/dev/null; then
     act "apt-mark unhold envoy" apt-mark unhold envoy
     act "Usunięcie pakietu envoy" apt-get purge -y -q envoy
-    act "Usunięcie repozytorium Envoy" rm -f /etc/apt/sources.list.d/envoy.sources /etc/apt/preferences.d/omnissa-envoy /etc/apt/keyrings/envoy-keyring.gpg
+    act "Usunięcie repozytorium Envoy" rm -f /etc/apt/sources.list.d/envoy.list /etc/apt/sources.list.d/envoy.sources /etc/apt/preferences.d/omnissa-envoy /etc/apt/keyrings/envoy-keyring.gpg
     act "apt-get update" apt-get update -q
   else
     log WARN "Pakiet envoy był zainstalowany przed instalatorem - pozostawiono"

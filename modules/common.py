@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 APP_NAME = "omnissa-envoy-lb"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 
 APP_DIR = Path(os.environ.get("OMNISSA_LB_APP_DIR", "/opt/omnissa-envoy-lb"))
 ETC_DIR = Path(os.environ.get("OMNISSA_LB_ETC_DIR", "/etc/omnissa-lb"))

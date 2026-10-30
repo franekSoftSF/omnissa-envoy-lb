@@ -9,8 +9,9 @@
   (`Signed-By`), a APT weryfikuje podpis `InRelease`.
 * Zmiana klucza repozytorium wymaga potwierdzenia administratora. W trybie unattended
   wymaga przypiętego odcisku.
-* Brak `curl | bash`, brak niezweryfikowanych binariów, brak automatycznego użycia pakietów
-  z innego wydania Ubuntu.
+* Brak `curl | bash` i niezweryfikowanych binariów. Suite repozytorium (`jammy`) jest stałą,
+  udokumentowaną decyzją projektu (pakiet z binarką statyczną), a nie automatycznym doborem.
+  Zgodność binarki z hostem jest weryfikowana po instalacji, a błąd oznacza rollback.
 * `dpkg --verify envoy` sprawdza integralność plików pakietu. `apt-mark hold envoy`
   blokuje niekontrolowane aktualizacje (np. unattended-upgrades).
 * Zależności Python mają przypięte wersje (`requirements.txt`), trafiają do izolowanego

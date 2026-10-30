@@ -26,7 +26,9 @@ nieudanej transakcji: `/var/backups/omnissa-lb/tx-*/diagnostics/`.
 | Objaw (komunikat) | Przyczyna / rozwiązanie |
 |---|---|
 | `Nieobsługiwana wersja Ubuntu` | wspierane są tylko 24.04 i 26.04 |
-| `repozytorium Envoy ... nie publikuje wydania '<codename>'` | brak oficjalnego pakietu dla tego wydania lub brak łączności z `apt.envoyproxy.io`. Instalacja kończy się bez zmian. Sprawdź proxy/firewall. Inne suite tylko świadomie: `--envoy-apt-suite` |
+| `Repozytorium Envoy (..., suite 'jammy') jest nieosiągalne` | brak łączności z `apt.envoyproxy.io` (DNS, proxy, firewall). Instalacja kończy się bez zmian. Mirror: `--envoy-repo-url` |
+| `Binarka envoy (suite ...) nie uruchamia się` | pakiet niezgodny z hostem. Rollback wycofuje zmiany. Inny suite: `--envoy-apt-suite` |
+| `omnissa-lb: środowisko nie jest jeszcze przygotowane` | paczka .deb zainstalowana, wdrożenie nie. Uruchom `sudo omnissa-lb-install` |
 | `Odcisk klucza repozytorium nie zgadza się` | możliwa podmiana klucza. Zweryfikuj odcisk w dokumentacji Envoy |
 | `Zainstalowany Envoy X różni się od wymaganego Y` | dodaj `--upgrade-envoy` (wykonywany jest backup binarki) |
 | `Adres VIP ... odpowiada w sieci` | konflikt IP. Wybierz wolny adres |

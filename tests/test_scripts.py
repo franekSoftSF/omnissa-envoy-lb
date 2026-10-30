@@ -4,7 +4,7 @@ import unittest
 
 from tests.helpers import ROOT
 
-SCRIPTS = ["install.sh", "uninstall.sh", "update.sh", "scripts/verify-omnissa-lb.sh"]
+SCRIPTS = ["install.sh", "uninstall.sh", "update.sh", "scripts/verify-omnissa-lb.sh", "packaging/build-deb.sh"]
 
 
 class ScriptsTest(unittest.TestCase):
@@ -37,6 +37,38 @@ class ScriptsTest(unittest.TestCase):
         for line in (ROOT / "requirements.txt").read_text().splitlines():
             if line.strip() and not line.startswith("#"):
                 self.assertRegex(line, r"^[A-Za-z0-9_.-]+==\d")
+
+    def test_envoy_repo_method(self):
+        text = (ROOT / "install.sh").read_text()
+        self.assertIn("readonly ENVOY_DEFAULT_SUITE=jammy", text)
+        self.assertIn("readonly ENVOY_SOURCES=/etc/apt/sources.list.d/envoy.list", text)
+        self.assertIn('deb [arch=${ARCH} signed-by=${ENVOY_KEYRING}] ${ENVOY_REPO_URL} ${ENVOY_SUITE} main', text)
+
+    def test_versions_consistent(self):
+        import re
+
+        sh = re.search(r'INSTALLER_VERSION="([^"]+)"', (ROOT / "install.sh").read_text()).group(1)
+        py = re.search(r'APP_VERSION = "([^"]+)"', (ROOT / "modules/common.py").read_text()).group(1)
+        ch = re.search(r"\(([^)]+)\)", (ROOT / "packaging/debian/changelog").read_text()).group(1)
+        self.assertEqual({sh, py, ch}, {sh})
+
+    @unittest.skipUnless(shutil.which("dpkg-deb"), "dpkg-deb niedostępny")
+    def test_build_deb(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            r = subprocess.run(["bash", str(ROOT / "packaging/build-deb.sh")], capture_output=True, text=True,
+                               env={**__import__("os").environ, "TMPDIR": tmp})
+            self.assertEqual(r.returncode, 0, r.stderr)
+            deb = r.stdout.strip().splitlines()[-1]
+            info = subprocess.run(["dpkg-deb", "--field", deb, "Package", "Architecture"], capture_output=True, text=True)
+            self.assertIn("omnissa-envoy-lb", info.stdout)
+            self.assertIn("all", info.stdout)
+            contents = subprocess.run(["dpkg-deb", "--contents", deb], capture_output=True, text=True).stdout
+            for path in ("./opt/omnissa-envoy-lb/install.sh", "./usr/sbin/omnissa-lb-install",
+                         "./opt/omnissa-envoy-lb/modules/envoy_config.py"):
+                self.assertIn(path, contents)
+            self.assertNotIn("tests/", contents)
 
 
 if __name__ == "__main__":

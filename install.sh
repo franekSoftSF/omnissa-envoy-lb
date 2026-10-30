@@ -15,7 +15,7 @@ set -Eeuo pipefail
 umask 027
 export LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
 
-readonly INSTALLER_VERSION="1.0.0"
+readonly INSTALLER_VERSION="1.1.0"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly SCRIPT_DIR
 
@@ -36,7 +36,13 @@ readonly LOCK_FILE=/run/lock/omnissa-lb-install.lock
 ENVOY_REPO_URL="https://apt.envoyproxy.io"
 ENVOY_KEY_URL=""
 readonly ENVOY_KEYRING=/etc/apt/keyrings/envoy-keyring.gpg
-readonly ENVOY_SOURCES=/etc/apt/sources.list.d/envoy.sources
+readonly ENVOY_SOURCES=/etc/apt/sources.list.d/envoy.list
+readonly ENVOY_SOURCES_LEGACY=/etc/apt/sources.list.d/envoy.sources   # format z wersji 1.0.0 (migracja)
+# Metoda instalacji projektu: repozytorium apt.envoyproxy.io, suite "jammy" także na Ubuntu
+# 24.04/26.04. Pakiet envoy zawiera statycznie zlinkowaną binarkę niezależną od bibliotek
+# wydania Ubuntu; zgodność z hostem jest weryfikowana po instalacji (envoy --version,
+# envoy --mode validate). Inny suite: --envoy-apt-suite lub envoy.apt_suite.
+readonly ENVOY_DEFAULT_SUITE=jammy
 readonly ENVOY_PREFS=/etc/apt/preferences.d/omnissa-envoy
 
 readonly SUPPORTED_VERSIONS="24.04 26.04"
@@ -370,7 +376,7 @@ Użycie: sudo bash install.sh [opcje]
   --mode TRYB               install | update | reconfigure | repair (domyślnie: wykrywany)
   --envoy-version X.Y[.Z]   przypnij wersję Envoy (nadpisuje envoy.version)
   --upgrade-envoy           zezwól na zmianę wersji już zainstalowanego Envoy
-  --envoy-apt-suite SUITE   jawnie wskaż suite repozytorium Envoy (domyślnie codename Ubuntu)
+  --envoy-apt-suite SUITE   suite repozytorium Envoy (domyślnie jammy - metoda projektu)
   --envoy-key-fingerprint F wymagany odcisk klucza repozytorium Envoy
   --envoy-repo-url URL      wewnętrzny mirror apt.envoyproxy.io (HTTPS, ten sam klucz podpisu)
   --wheelhouse KATALOG      instalacja zależności Python offline (pip --no-index)
@@ -638,13 +644,15 @@ PYEOF
 
 check_envoy_repo() {
   section envoy-repo "Weryfikacja dostępności pakietu Envoy dla Ubuntu ${OS_VERSION}"
-  ENVOY_SUITE="${APT_SUITE_OPT:-$OS_CODENAME}"
-  if [[ -n "$APT_SUITE_OPT" && "$APT_SUITE_OPT" != "$OS_CODENAME" ]]; then
-    warn "Jawnie wskazano suite '${APT_SUITE_OPT}' (inny niż ${OS_CODENAME}) - decyzja administratora (--envoy-apt-suite)"
+  ENVOY_SUITE="${APT_SUITE_OPT:-$ENVOY_DEFAULT_SUITE}"
+  if [[ -n "$APT_SUITE_OPT" ]]; then
+    warn "Suite repozytorium Envoy wskazany jawnie: '${APT_SUITE_OPT}' (domyślnie ${ENVOY_DEFAULT_SUITE})"
+  else
+    info "Repozytorium Envoy: ${ENVOY_REPO_URL} suite '${ENVOY_SUITE}' (metoda projektu dla Ubuntu ${OS_VERSION}; binarka statyczna, zgodność weryfikowana po instalacji)"
   fi
   if ! http_check "${ENVOY_REPO_URL}/dists/${ENVOY_SUITE}/InRelease"; then
-    check_fail "$E_ENVOY" "Oficjalne repozytorium Envoy (${ENVOY_REPO_URL}) nie publikuje wydania '${ENVOY_SUITE}' dla Ubuntu ${OS_VERSION} lub jest nieosiągalne." \
-      "Instalacja przerwana bez zmian w systemie. Pakiety z innych wydań Ubuntu NIE są stosowane automatycznie. Sprawdź łączność z ${ENVOY_REPO_URL} lub - świadomie - wskaż suite: --envoy-apt-suite <suite>."
+    check_fail "$E_ENVOY" "Repozytorium Envoy (${ENVOY_REPO_URL}, suite '${ENVOY_SUITE}') jest nieosiągalne lub nie publikuje tego wydania." \
+      "Instalacja przerwana bez zmian w systemie. Sprawdź łączność z ${ENVOY_REPO_URL} (DNS, proxy, firewall) albo wskaż mirror: --envoy-repo-url."
     ENVOY_TARGET_VERSION="(niedostępna)"
     return 0
   fi
@@ -724,7 +732,7 @@ detect_existing() {
 plan_dependencies() {
   section deps "Analiza zależności"
   PKGS_REQUIRED=(python3 python3-venv ca-certificates curl gnupg iproute2 iputils-ping iputils-arping
-                 dnsutils netplan.io openssl jq)
+                 bind9-dnsutils netplan.io openssl jq)
   # Firewall: jeśli ufw jest aktywny - używamy ufw, w przeciwnym razie nftables
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
     info "ufw aktywny - reguły firewall będą zarządzane przez ufw"
@@ -755,7 +763,7 @@ print_dry_run_plan() {
     - apt-get update
 $( (( ${#PKGS_MISSING[@]} )) && echo "    - apt-get install -y --no-install-recommends ${PKGS_MISSING[*]}" )
     - klucz repozytorium Envoy: ${ENVOY_KEY_URL} -> ${ENVOY_KEYRING} (weryfikacja odcisku${KEY_FPR_OPT:+: $KEY_FPR_OPT})
-    - repozytorium: ${ENVOY_SOURCES} (deb822, ${ENVOY_REPO_URL} ${ENVOY_SUITE} main, Signed-By)
+    - repozytorium: ${ENVOY_SOURCES} (deb [arch=${ARCH} signed-by=${ENVOY_KEYRING}] ${ENVOY_REPO_URL} ${ENVOY_SUITE} main)
     - przypięcie: ${ENVOY_PREFS} (origin ${ENVOY_REPO_URL#https://}${ENVOY_VERSION_OPT:+, wersja ${ENVOY_VERSION_OPT}})
     - Envoy: $( if [[ -z "$ENVOY_PRE_VERSION" ]]; then echo "instalacja envoy=${ENVOY_TARGET_VERSION}";
                 elif [[ -n "$ENVOY_VERSION_OPT" && "$ENVOY_PRE_VERSION" != "$ENVOY_TARGET_VERSION" ]]; then echo "zmiana ${ENVOY_PRE_VERSION} -> ${ENVOY_TARGET_VERSION} (wymaga --upgrade-envoy, backup binarki)";
@@ -850,20 +858,24 @@ setup_envoy_repo() {
 
   # Bez duplikowania repozytoriów: jeśli inny plik już definiuje apt.envoyproxy.io - nie dodajemy drugiego
   local others
+  # Migracja: wpis deb822 utworzony przez wersję 1.0.0 instalatora zastępuje envoy.list
+  if [[ -f "$ENVOY_SOURCES_LEGACY" ]] && grep -q "omnissa-envoy-lb" "$ENVOY_SOURCES_LEGACY"; then
+    tx_backup "$ENVOY_SOURCES_LEGACY"
+    rm -f -- "$ENVOY_SOURCES_LEGACY"
+    info "Usunięto poprzedni wpis repozytorium ${ENVOY_SOURCES_LEGACY} (zastąpiony przez ${ENVOY_SOURCES})"
+  fi
+  # Bez duplikowania repozytoriów: jeśli inny plik już definiuje repozytorium Envoy - nie dodajemy drugiego.
+  # Istniejący ${ENVOY_SOURCES} (np. z ręcznej instalacji wg poradnika) jest aktualizowany z kopią zapasową.
+  local others
   others="$(grep -rlsF "$ENVOY_REPO_URL" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null | grep -vxF "$ENVOY_SOURCES" || true)"
   if [[ -n "$others" ]]; then
     warn "Repozytorium Envoy jest już zdefiniowane w: ${others//$'\n'/, } - nie dodaję duplikatu ${ENVOY_SOURCES}"
   else
-    cat >"${WORK_DIR}/envoy.sources" <<EOF
-# Zarządzane przez omnissa-envoy-lb - oficjalne repozytorium Envoy Proxy
-Types: deb
-URIs: ${ENVOY_REPO_URL}
-Suites: ${ENVOY_SUITE}
-Components: main
-Architectures: ${ARCH}
-Signed-By: ${ENVOY_KEYRING}
-EOF
-    managed_install "${WORK_DIR}/envoy.sources" "$ENVOY_SOURCES" 0644 && info "Zapisano ${ENVOY_SOURCES}" || debug "repozytorium bez zmian"
+    {
+      echo "# Zarządzane przez omnissa-envoy-lb - repozytorium Envoy Proxy (${ENVOY_REPO_URL})"
+      echo "deb [arch=${ARCH} signed-by=${ENVOY_KEYRING}] ${ENVOY_REPO_URL} ${ENVOY_SUITE} main"
+    } >"${WORK_DIR}/envoy.list"
+    managed_install "${WORK_DIR}/envoy.list" "$ENVOY_SOURCES" 0644 && info "Zapisano ${ENVOY_SOURCES}" || debug "repozytorium bez zmian"
   fi
 
   {
@@ -924,7 +936,9 @@ install_envoy() {
   [[ -x "$ENVOY_BIN" ]] || die "$E_ENVOY" "Brak binarki envoy po instalacji pakietu"
   run_step envoy-verify "Weryfikacja integralności plików pakietu (dpkg --verify)" dpkg --verify envoy || \
     die "$E_ENVOY" "Pliki pakietu envoy nie przeszły weryfikacji integralności"
-  "$ENVOY_BIN" --version >>"$LOG_FILE" 2>&1 || die "$E_ENVOY" "Binarka envoy nie uruchamia się na tej platformie"
+  "$ENVOY_BIN" --version >>"$LOG_FILE" 2>&1 || die "$E_ENVOY" \
+    "Binarka envoy (suite ${ENVOY_SUITE}) nie uruchamia się na Ubuntu ${OS_VERSION}/${ARCH}" \
+    "Pakiet zostanie wycofany przez rollback; wskaż inny suite: --envoy-apt-suite"
   ok "Envoy ${ENVOY_FINAL_VERSION} zainstalowany (${ENVOY_BIN}), pakiet wstrzymany (apt-mark hold)"
   record_step envoy ok 0 "envoy ${ENVOY_FINAL_VERSION}"
 }
@@ -956,7 +970,7 @@ deploy_app_files() {
     [[ "$rel" == *.sh || "$rel" == omnissa-lb.py ]] && mode=0755
     managed_install "$f" "${APP_DIR}/${rel}" "$mode" && changed=$((changed + 1))
   done < <(cd "$SCRIPT_DIR" && find "$SCRIPT_DIR" \
-             \( -name venv -o -name __pycache__ -o -name .git -o -name tests \) -prune -o \
+             \( -name venv -o -name __pycache__ -o -name .git -o -name tests -o -name packaging -o -name dist \) -prune -o \
              -type f \( -name '*.py' -o -name '*.sh' -o -name '*.yaml' -o -name '*.template' -o -name '*.md' \
                         -o -name '*.service' -o -name '*.timer' -o -name requirements.txt \) -print0)
   printf '#!/bin/sh\n# Zarządzane przez omnissa-envoy-lb\nexec %s/bin/python3 %s/omnissa-lb.py "$@"\n' "$VENV_DIR" "$APP_DIR" \
