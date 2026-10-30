@@ -1,0 +1,65 @@
+# Zarządzane przez omnissa-envoy-lb (install.sh). Limity zasobów:
+#   /etc/systemd/system/envoy.service.d/10-omnissa-limits.conf
+[Unit]
+Description=Envoy Proxy - Omnissa Load Balancer (Tunnel/SEG)
+Documentation=https://www.envoyproxy.io/docs file:/opt/omnissa-envoy-lb/docs/INSTALL.md
+Wants=network-online.target
+After=network-online.target omnissa-lb-firewall.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=envoy
+Group=envoy
+EnvironmentFile=/etc/omnissa-lb/envoy.env
+# Walidacja konfiguracji przed każdym startem - błędna konfiguracja nie uruchomi usługi
+ExecStartPre=/usr/bin/envoy --mode validate -c ${ENVOY_CONFIG} --log-level warn
+ExecStart=/usr/bin/envoy -c ${ENVOY_CONFIG} --log-level ${ENVOY_LOG_LEVEL} --disable-hot-restart --drain-time-s ${ENVOY_DRAIN_SECONDS} --drain-strategy gradual $ENVOY_EXTRA_ARGS
+# Bezpieczne zatrzymanie: łagodny drain listenerów, następnie SIGTERM
+ExecStop=/bin/sh -c 'curl -fsS -m 3 -X POST "${ENVOY_ADMIN}/drain_listeners?graceful" >/dev/null 2>&1 || true; sleep "${ENVOY_DRAIN_SECONDS}"; kill -TERM "$MAINPID" 2>/dev/null || true'
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStartSec=60
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=5s
+
+# Logowanie przez journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=envoy
+
+# Ograniczone uprawnienia
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+UMask=0027
+ReadOnlyPaths=/etc/envoy /etc/omnissa-lb
+RuntimeDirectory=envoy
+RuntimeDirectoryMode=0750
+
+# Domyślne limity (nadpisywane przez drop-in z settings.yaml)
+LimitNOFILE=1048576
+TasksMax=4096
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

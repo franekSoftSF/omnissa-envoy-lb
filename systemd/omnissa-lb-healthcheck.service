@@ -1,0 +1,13 @@
+# Zarządzane przez omnissa-envoy-lb - okresowy test stanu (wynik w journald)
+[Unit]
+Description=Omnissa LB - test stanu Envoy, VIP i backendow
+After=envoy.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/omnissa-lb monitor
+SyslogIdentifier=omnissa-lb
+Nice=10
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes

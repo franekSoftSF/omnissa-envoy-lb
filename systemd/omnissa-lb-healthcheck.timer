@@ -1,0 +1,12 @@
+# Zarządzane przez omnissa-envoy-lb (interwał: monitoring.interval)
+[Unit]
+Description=Omnissa LB - harmonogram testu stanu
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=@INTERVAL@
+AccuracySec=30s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

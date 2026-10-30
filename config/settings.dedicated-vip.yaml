@@ -1,0 +1,31 @@
+# Osobne VIP dla Tunnel i SEG na tym samym interfejsie ens160.
+# Tunnel: TCP/UDP 8443, SEG: TCP 443.
+version: 1
+deployment: { name: omnissa-lb-dedicated }
+network:
+  interface: ens160
+vip:
+  mode: dedicated
+  tunnel: 10.0.0.51
+  seg: 10.0.0.52
+services:
+  tunnel:
+    enabled: true
+    fqdn: tunnel.example.com
+    listeners:
+      - { protocol: tcp, port: 8443 }
+      - { protocol: udp, port: 8443 }
+    backends: [10.0.1.11, 10.0.1.12]
+    session_affinity: source_ip
+  seg:
+    enabled: true
+    fqdn: seg.example.com
+    listeners:
+      - { protocol: tcp, port: 443 }
+    backends: [10.0.1.21, 10.0.1.22]
+    health_check: { type: https, path: /favicon.ico }
+sni:
+  enforce_on_dedicated_vip: true
+validation:
+  backend_check: critical
+  sni_check: critical

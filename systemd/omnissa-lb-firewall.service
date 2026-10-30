@@ -1,0 +1,17 @@
+# Zarządzane przez omnissa-envoy-lb. Ładuje wyłącznie tabelę inet omnissa_lb
+# (nie wykonuje 'flush ruleset' - reguły ufw/docker pozostają nienaruszone).
+[Unit]
+Description=Omnissa LB - reguly nftables dla adresow VIP
+DefaultDependencies=no
+After=local-fs.target nftables.service ufw.service
+Before=envoy.service network-online.target
+ConditionPathExists=/etc/omnissa-lb/nftables.nft
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/omnissa-lb/nftables.nft
+ExecReload=/usr/sbin/nft -f /etc/omnissa-lb/nftables.nft
+
+[Install]
+WantedBy=multi-user.target

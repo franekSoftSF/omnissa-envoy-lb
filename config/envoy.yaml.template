@@ -1,0 +1,237 @@
+{#- Szablon Jinja2 konfiguracji Envoy generowany przez modules/envoy_config.py.
+    Wszystkie wartości wstawiane są filtrem tojson (JSON jest poprawnym YAML),
+    co eliminuje problemy z cytowaniem i wstrzykiwaniem treści. -#}
+# =============================================================================
+# Plik wygenerowany automatycznie przez omnissa-envoy-lb {{ app_version }}
+# Wdrożenie: {{ deployment | tojson }}  |  wygenerowano: {{ generated_at }}
+# NIE EDYTUJ RĘCZNIE - zmiany wprowadzaj w /etc/omnissa-lb/settings.yaml
+# i uruchom: omnissa-lb configure
+# =============================================================================
+node:
+  id: {{ node_id | tojson }}
+  cluster: "omnissa-envoy-lb"
+
+admin:
+  address:
+    socket_address:
+      address: {{ envoy.admin_address | tojson }}
+      port_value: {{ envoy.admin_port }}
+
+overload_manager:
+  resource_monitors:
+    - name: envoy.resource_monitors.global_downstream_max_connections
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.resource_monitors.downstream_connections.v3.DownstreamConnectionsConfig
+        max_active_downstream_connections: {{ envoy.max_downstream_connections }}
+
+static_resources:
+  listeners:
+{%- for l in listeners %}
+{%- if l.protocol == "tcp" %}
+    # TCP {{ l.address }}:{{ l.port }} -> {{ l.services | join(", ") }}
+    - name: {{ l.name | tojson }}
+      address:
+        socket_address:
+          protocol: TCP
+          address: {{ l.address | tojson }}
+          port_value: {{ l.port }}
+      freebind: true
+      per_connection_buffer_limit_bytes: 1048576
+{%- if l.use_sni %}
+      listener_filters_timeout: 5s
+      continue_on_listener_filters_timeout: false
+      listener_filters:
+        - name: envoy.filters.listener.tls_inspector
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.listener.tls_inspector.v3.TlsInspector
+{%- endif %}
+      filter_chains:
+{%- for fc in l.filter_chains %}
+        - name: {{ fc.name | tojson }}
+{%- if fc.server_names %}
+          filter_chain_match:
+            server_names: {{ fc.server_names | tojson }}
+{%- endif %}
+          filters:
+            - name: envoy.filters.network.tcp_proxy
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
+                stat_prefix: {{ fc.stat_prefix | tojson }}
+                cluster: {{ fc.cluster | tojson }}
+                idle_timeout: {{ envoy.tcp_idle_timeout | tojson }}
+                max_connect_attempts: 3
+{%- if fc.source_ip_hash %}
+                hash_policy:
+                  - source_ip: {}
+{%- endif %}
+{%- if envoy.access_log %}
+                access_log:
+                  - name: envoy.access_loggers.stdout
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                      log_format:
+                        text_format_source:
+                          inline_string: "[%START_TIME%] tcp {{ fc.stat_prefix }} client=%DOWNSTREAM_REMOTE_ADDRESS% sni=%REQUESTED_SERVER_NAME% upstream=%UPSTREAM_HOST% rx=%BYTES_RECEIVED% tx=%BYTES_SENT% duration_ms=%DURATION% flags=%RESPONSE_FLAGS%\n"
+{%- endif %}
+{%- endfor %}
+{%- else %}
+    # UDP {{ l.address }}:{{ l.port }} -> {{ l.services | join(", ") }}
+    - name: {{ l.name | tojson }}
+      address:
+        socket_address:
+          protocol: UDP
+          address: {{ l.address | tojson }}
+          port_value: {{ l.port }}
+      freebind: true
+      udp_listener_config:
+        downstream_socket_config:
+          max_rx_datagram_size: 9000
+      listener_filters:
+        - name: envoy.filters.udp_listener.udp_proxy
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.udp.udp_proxy.v3.UdpProxyConfig
+            stat_prefix: {{ l.stat_prefix | tojson }}
+            idle_timeout: {{ envoy.udp_idle_timeout | tojson }}
+            upstream_socket_config:
+              max_rx_datagram_size: 9000
+{%- if l.source_ip_hash %}
+            hash_policies:
+              - source_ip: true
+{%- endif %}
+            matcher:
+              on_no_match:
+                action:
+                  name: route
+                  typed_config:
+                    "@type": type.googleapis.com/envoy.extensions.filters.udp.udp_proxy.v3.Route
+                    cluster: {{ l.cluster | tojson }}
+{%- endif %}
+{%- endfor %}
+{%- if prometheus.enabled %}
+    # Monitoring: eksport metryk Prometheus (tylko ścieżka /stats/prometheus)
+    - name: "prometheus"
+      address:
+        socket_address:
+          protocol: TCP
+          address: {{ prometheus.address | tojson }}
+          port_value: {{ prometheus.port }}
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: prometheus
+                route_config:
+                  name: prometheus
+                  virtual_hosts:
+                    - name: prometheus
+                      domains: ["*"]
+                      routes:
+                        - match:
+                            path: "/stats/prometheus"
+                          route:
+                            cluster: envoy_admin
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+{%- endif %}
+
+  clusters:
+{%- for c in clusters %}
+    # {{ c.service }} {{ c.protocol | upper }} -> backend port {{ c.backend_port }}
+    - name: {{ c.name | tojson }}
+      type: {{ c.type }}
+      connect_timeout: {{ envoy.connect_timeout | tojson }}
+      lb_policy: {{ c.lb_policy }}
+{%- if c.type == "STRICT_DNS" %}
+      dns_lookup_family: V4_ONLY
+      dns_refresh_rate: 30s
+      respect_dns_ttl: true
+{%- endif %}
+      circuit_breakers:
+        thresholds:
+          - priority: DEFAULT
+            max_connections: {{ envoy.max_connections_per_cluster }}
+            max_pending_requests: {{ envoy.max_connections_per_cluster }}
+{%- if c.protocol == "tcp" %}
+      outlier_detection:
+        split_external_local_origin_errors: true
+        consecutive_local_origin_failure: 5
+        interval: 10s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
+{%- endif %}
+{%- if c.health_check %}
+      health_checks:
+        - timeout: {{ c.health_check.timeout | tojson }}
+          interval: {{ c.health_check.interval | tojson }}
+          interval_jitter: 1s
+          unhealthy_threshold: {{ c.health_check.unhealthy_threshold }}
+          healthy_threshold: {{ c.health_check.healthy_threshold }}
+          no_traffic_interval: {{ c.health_check.interval | tojson }}
+{%- if c.health_check.type == "tcp" %}
+          tcp_health_check: {}
+{%- else %}
+          http_health_check:
+            path: {{ c.health_check.path | tojson }}
+            host: {{ c.health_check.host | tojson }}
+            expected_statuses:
+{%- for s in c.health_check.expected_statuses %}
+              - start: {{ s }}
+                end: {{ s + 1 }}
+{%- endfor %}
+{%- if c.health_check.type == "https" %}
+          transport_socket_match_criteria:
+            omnissa_hc: "tls"
+{%- endif %}
+{%- endif %}
+{%- endif %}
+{%- if c.health_check and c.health_check.type == "https" %}
+      transport_socket_matches:
+        - name: "health-check-tls"
+          match:
+            omnissa_hc: "tls"
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              sni: {{ c.health_check.host | tojson }}
+        - name: "passthrough"
+          match: {}
+          transport_socket:
+            name: envoy.transport_sockets.raw_buffer
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer
+{%- endif %}
+      load_assignment:
+        cluster_name: {{ c.name | tojson }}
+        endpoints:
+          - lb_endpoints:
+{%- for e in c.endpoints %}
+              - load_balancing_weight: {{ e.weight }}
+                endpoint:
+                  address:
+                    socket_address:
+                      address: {{ e.address | tojson }}
+                      port_value: {{ c.backend_port }}
+{%- if c.health_check and c.health_check.port %}
+                  health_check_config:
+                    port_value: {{ c.health_check.port }}
+{%- endif %}
+{%- endfor %}
+{%- endfor %}
+{%- if prometheus.enabled %}
+    - name: envoy_admin
+      type: STATIC
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: envoy_admin
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: {{ envoy.admin_address | tojson }}
+                      port_value: {{ envoy.admin_port }}
+{%- endif %}

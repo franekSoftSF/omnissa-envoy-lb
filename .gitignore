@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+# Lokalna konfiguracja wdrożenia (może zawierać adresy środowiska)
+config/settings.yaml
+*.log
+*.tar.gz

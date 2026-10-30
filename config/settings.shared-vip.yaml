@@ -1,0 +1,30 @@
+# Tunnel i SEG na wspólnym VIP 10.0.0.50:443 - rozdział ruchu po SNI.
+# UDP 443 trafia wyłącznie do Tunnel (UDP/DTLS nie przenosi SNI).
+version: 1
+deployment: { name: omnissa-lb-shared }
+network:
+  interface: ens160
+vip:
+  mode: shared
+  shared: 10.0.0.50
+services:
+  tunnel:
+    enabled: true
+    fqdn: tunnel.example.com
+    listeners:
+      - { protocol: tcp, port: 443 }
+      - { protocol: udp, port: 443 }
+    backends: [10.0.1.11, 10.0.1.12]
+    session_affinity: source_ip
+  seg:
+    enabled: true
+    fqdn: seg.example.com
+    listeners:
+      - { protocol: tcp, port: 443 }
+    backends: [10.0.1.21, 10.0.1.22]
+firewall:
+  manage: true
+  backend: auto
+validation:
+  backend_check: critical
+  sni_check: critical

@@ -1,0 +1,120 @@
+# =============================================================================
+# Omnissa Envoy Load Balancer - pełny przykład konfiguracji (wszystkie opcje)
+# Kopiuj do ./config/settings.yaml i dostosuj. Plik aktywny po instalacji:
+#   /etc/omnissa-lb/settings.yaml
+# Plik NIE zawiera sekretów (Envoy działa w trybie TLS passthrough).
+# =============================================================================
+version: 1
+
+deployment:
+  name: omnissa-lb-01
+
+network:
+  interface: ens160            # jeden, istniejący interfejs; "auto" = interfejs trasy domyślnej
+  apply_mode: runtime          # runtime: VIP dodany przez 'ip addr' + trwały plik Netplan (bez restartu sieci)
+                               # netplan-apply: 'netplan apply' z automatycznym rollbackiem przy utracie łączności
+  confirm_timeout: 120         # [s] dead-man switch dla netplan-apply
+  connectivity_targets: []     # dodatkowe adresy testu łączności (oprócz bramy), np. [10.0.0.10]
+
+vip:
+  mode: shared                 # shared: Tunnel + SEG na jednym VIP (routing SNI); dedicated: osobne VIP
+  shared: 10.0.0.50
+  tunnel: null                 # tylko dla mode: dedicated
+  seg: null                    # tylko dla mode: dedicated
+  prefix: null                 # domyślnie maska podsieci adresu głównego interfejsu
+  duplicate_check: true        # arping -D przed dodaniem VIP (wykrywanie konfliktu IP)
+  gratuitous_arp: true         # ogłoszenie VIP w sieci po dodaniu
+
+services:
+  tunnel:
+    enabled: true
+    fqdn: tunnel.example.com
+    sni_aliases: []            # dodatkowe nazwy SNI kierowane do Tunnel
+    listeners:
+      - { protocol: tcp, port: 443, backend_port: 443 }
+      - { protocol: udp, port: 443, backend_port: 443 }   # Per-App Tunnel (DTLS) - bez SNI
+    backends:
+      - { address: 10.0.1.11, weight: 1 }
+      - { address: 10.0.1.12, weight: 1 }
+    lb_policy: least_request   # least_request | round_robin | random | ring_hash | maglev
+    session_affinity: source_ip   # none | source_ip (wymusza RING_HASH)
+    health_check: {}           # nadpisuje health_check_defaults
+
+  seg:
+    enabled: true
+    fqdn: seg.example.com
+    sni_aliases: []
+    listeners:
+      - { protocol: tcp, port: 443, backend_port: 443 }
+    backends:
+      - { address: 10.0.1.21 }
+      - { address: 10.0.1.22 }
+    lb_policy: least_request
+    session_affinity: none
+    health_check:
+      type: https
+      path: /favicon.ico
+
+health_check_defaults:
+  type: tcp                    # tcp | http | https | none
+  interval: 5s
+  timeout: 2s
+  unhealthy_threshold: 3
+  healthy_threshold: 2
+  path: /favicon.ico           # dla http/https (UAG odpowiada 200 na /favicon.ico)
+  host: null                   # domyślnie FQDN usługi
+  expected_statuses: [200]
+  port: null                   # inny port health checka (dla UDP domyślnie port TCP usługi)
+
+sni:
+  unknown_sni_action: reject   # reject | tunnel | seg - co zrobić z ruchem bez znanego SNI
+  enforce_on_dedicated_vip: true
+
+envoy:
+  version: ""                  # "" = najnowsza dostępna w repozytorium; "1.34.1" = przypięcie wersji
+  source: apt                  # oficjalne repozytorium apt.envoyproxy.io (podpisane)
+  apt_suite: ""                # jawne nadpisanie suite repozytorium (NIE jest używane automatycznie)
+  apt_key_fingerprint: ""      # zalecane: przypięcie odcisku klucza repozytorium
+  admin_address: 127.0.0.1     # tylko loopback
+  admin_port: 9901
+  log_level: info
+  concurrency: 0               # 0 = liczba rdzeni
+  connect_timeout: 5s
+  tcp_idle_timeout: 3600s
+  udp_idle_timeout: 300s
+  max_connections_per_cluster: 50000
+  max_downstream_connections: 100000
+  drain_seconds: 15            # łagodne zatrzymanie (drain listenerów)
+  access_log: true             # logi połączeń do journald
+
+resources:
+  memory_max: 2G
+  cpu_quota: ""                # np. 200%
+  nofile: 1048576
+  tasks_max: 4096
+
+firewall:
+  manage: true
+  backend: auto                # auto (ufw jeśli aktywny, inaczej nftables) | nftables | ufw
+  restrict_vip: true           # blokuj na VIP wszystko poza listenerami
+  allowed_sources: [0.0.0.0/0]
+
+monitoring:
+  healthcheck_timer: true      # okresowy test stanu (journald: journalctl -t omnissa-lb)
+  interval: 5min
+  prometheus:
+    enabled: false
+    address: 127.0.0.1
+    port: 9902
+
+dns:
+  verify: true
+  require_match: false         # true = FQDN musi wskazywać na VIP (błąd krytyczny)
+  servers: []                  # serwery DNS do testu (puste = resolver systemowy)
+
+validation:
+  backend_check: critical      # critical | warning | skip
+  sni_check: critical
+
+backup:
+  keep: 20
