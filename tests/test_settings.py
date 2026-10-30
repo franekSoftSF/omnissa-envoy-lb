@@ -74,6 +74,32 @@ envoy: {admin_address: 0.0.0.0}
         with self.assertRaisesRegex(OmnissaError, "loopback IPv4"):
             settings.load(write_cfg(BASE + "envoy: {admin_address: '::1'}\n"))
 
+    def test_init_config_shared(self):
+        from modules import wizard
+
+        cfg = wizard.build_settings({"vip": "10.0.0.50", "interface": "ens160",
+                                     "tunnel_fqdn": "tunnel.example.com", "tunnel_backends": ["10.0.1.11"],
+                                     "seg_fqdn": "seg.example.com", "seg_backends": ["10.0.1.21", "10.0.1.22"]})
+        loaded = settings.load(write_cfg(settings.dump_yaml(cfg)))
+        self.assertEqual(settings.all_vips(loaded), ["10.0.0.50"])
+        self.assertEqual([l["protocol"] for l in loaded["services"]["tunnel"]["listeners"]], ["tcp", "udp"])
+
+    def test_init_config_dedicated_and_disabled_service(self):
+        from modules import wizard
+
+        cfg = wizard.build_settings({"mode": "dedicated", "tunnel_vip": "10.0.0.51", "seg": False,
+                                     "tunnel_fqdn": "tunnel.example.com", "tunnel_backends": ["uag1.example.com"]})
+        loaded = settings.load(write_cfg(settings.dump_yaml(cfg)))
+        self.assertEqual(settings.enabled_services(loaded), ["tunnel"])
+        self.assertEqual(loaded["services"]["tunnel"]["listeners"][0]["port"], 8443)
+
+    def test_init_config_reports_errors(self):
+        from modules import wizard
+
+        with self.assertRaisesRegex(OmnissaError, "services.seg.fqdn"):
+            wizard.build_settings({"vip": "10.0.0.50", "tunnel_fqdn": "tunnel.example.com",
+                                   "tunnel_backends": ["10.0.1.11"], "seg_backends": ["10.0.1.21"]})
+
     def test_duration(self):
         self.assertEqual(settings.duration("500ms", "x"), "0.5s")
         self.assertEqual(settings.duration("2m", "x"), "120s")

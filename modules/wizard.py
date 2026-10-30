@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from . import network_manager as net
-from .common import EXIT_ABORT, OmnissaError
+from .common import EXIT_ABORT, EXIT_CONFIG, OmnissaError
 from .settings import DEFAULTS, deep_merge, dump_yaml, read_file, validate
 
 
@@ -167,6 +167,51 @@ def run_wizard(output: Path, base: Path | None = None, interface: str | None = N
     output.write_text("# Wygenerowano kreatorem omnissa-lb\n" + dump_yaml(to_save))
     output.chmod(0o640)
     return output
+
+
+def build_settings(opts: dict) -> dict:
+    """Konfiguracja Tunnel/SEG z parametrów (bez pytań) - polecenie init-config.
+
+    opts: mode, interface, vip, tunnel_vip, seg_vip, tunnel/seg (bool), tunnel_fqdn, seg_fqdn,
+    tunnel_backends, seg_backends (listy), tunnel_ports, seg_ports ('tcp/443,udp/443'),
+    health_check, backend_check, firewall_backend, allowed_sources, name.
+    """
+    mode = opts.get("mode") or "shared"
+    cfg: dict = {
+        "version": 1,
+        "deployment": {"name": opts.get("name") or "omnissa-lb"},
+        "network": {"interface": opts.get("interface") or "auto"},
+        "vip": {"mode": mode},
+        "services": {},
+        "health_check_defaults": {"type": opts.get("health_check") or "tcp"},
+        "firewall": {"manage": opts.get("firewall_backend") != "none",
+                     "backend": opts.get("firewall_backend") if opts.get("firewall_backend") not in (None, "none") else "auto",
+                     "allowed_sources": opts.get("allowed_sources") or ["0.0.0.0/0"]},
+        "validation": {"backend_check": opts.get("backend_check") or "critical",
+                       "sni_check": opts.get("backend_check") or "critical"},
+    }
+    if mode == "shared":
+        cfg["vip"]["shared"] = opts.get("vip")
+    default_ports = {"tunnel": "tcp/443,udp/443" if mode == "shared" else "tcp/8443,udp/8443", "seg": "tcp/443"}
+    for svc in ("tunnel", "seg"):
+        if not opts.get(svc, True):
+            cfg["services"][svc] = {"enabled": False}
+            continue
+        if mode == "dedicated":
+            cfg["vip"][svc] = opts.get(f"{svc}_vip")
+        ports = opts.get(f"{svc}_ports") or default_ports[svc]
+        err = _ports_valid(ports)
+        if err:
+            raise OmnissaError(f"--{svc}-ports: {err}", EXIT_CONFIG)
+        cfg["services"][svc] = {
+            "enabled": True,
+            "fqdn": opts.get(f"{svc}_fqdn"),
+            "listeners": _ports(ports),
+            "backends": [{"address": a} for a in opts.get(f"{svc}_backends") or []],
+            "session_affinity": "source_ip" if svc == "tunnel" else "none",
+        }
+    validate(deep_merge(DEFAULTS, cfg))  # wszystkie błędy naraz, przed zapisem
+    return cfg
 
 
 def _clean(cfg: dict) -> dict:

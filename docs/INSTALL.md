@@ -45,6 +45,34 @@ sudo bash install.sh --unattended --interface ens160 --config ./config/settings.
 | `--wheelhouse DIR` | instalacja zależności Python offline |
 | `--keep-on-failure` | bez rollbacku po błędzie (na potrzeby analizy) |
 
+## Tworzenie konfiguracji Tunnel i SEG
+
+Masz trzy sposoby:
+
+* **Kreator interaktywny:** `sudo bash install.sh` zadaje pytania o interfejs, tryb VIP, FQDN,
+  listenery i backendy Tunnel/SEG, health check i firewall, a potem zapisuje
+  `/etc/omnissa-lb/settings.yaml`. Późniejsza rekonfiguracja: `sudo omnissa-lb configure --interactive`.
+* **Z parametrów, bez pytań** (tryb unattended):
+
+  ```bash
+  omnissa-lb init-config --interface ens160 --vip 10.0.0.50 --tunnel-fqdn tunnel.example.com --tunnel-backends 10.0.1.11,10.0.1.12 --seg-fqdn seg.example.com --seg-backends 10.0.1.21,10.0.1.22 --output settings.yaml
+  ```
+
+  ```bash
+  sudo bash install.sh --unattended --config ./settings.yaml
+  ```
+
+  Osobne VIP: `--mode dedicated --tunnel-vip 10.0.0.51 --seg-vip 10.0.0.52` (domyślnie
+  Tunnel tcp/udp 8443, SEG tcp 443). Inne opcje: `--tunnel-ports tcp/443,udp/443`,
+  `--seg-ports`, `--no-tunnel` / `--no-seg`, `--health-check https`,
+  `--backend-check warning`, `--firewall nftables|ufw|none`, `--allowed-sources`.
+  Bez `--output` wynik trafia na stdout. Istniejący plik nadpisuje tylko `--force`.
+  Parametry są walidowane przed zapisem i wszystkie błędy są zgłaszane naraz.
+  Z paczki `.deb` polecenie działa jeszcze przed `omnissa-lb-install` (na systemowym
+  Pythonie). Z kopii repozytorium uruchom `python3 omnissa-lb.py init-config ...`.
+* **Ręcznie:** skopiuj i dostosuj `config/settings.shared-vip.yaml`,
+  `config/settings.dedicated-vip.yaml` albo pełny `config/settings.example.yaml`.
+
 ## Przebieg instalacji (warstwa 1)
 
 1. Wykrycie systemu (`/etc/os-release`) i kontrola wersji 24.04/26.04 oraz architektury.

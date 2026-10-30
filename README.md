@@ -44,6 +44,14 @@ venv Python), konfiguruje systemd, uruchamia konfigurator i testy końcowe. Wdro
 oznaczane jako udane **tylko** wtedy, gdy przejdą wszystkie testy krytyczne. Po błędzie
 instalator przywraca poprzedni stan.
 
+## Konfiguracja Tunnel i SEG bez edycji YAML
+
+```bash
+python3 omnissa-lb.py init-config --interface ens160 --vip 10.0.0.50 --tunnel-fqdn tunnel.example.com --tunnel-backends 10.0.1.11,10.0.1.12 --seg-fqdn seg.example.com --seg-backends 10.0.1.21,10.0.1.22 --output config/settings.yaml
+```
+
+Szczegóły i tryb `dedicated`: [docs/INSTALL.md](docs/INSTALL.md#tworzenie-konfiguracji-tunnel-i-seg).
+
 ## Po instalacji
 
 | Polecenie | Opis |

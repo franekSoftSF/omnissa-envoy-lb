@@ -132,6 +132,33 @@ def cmd_wizard(args) -> int:
     return 0
 
 
+def cmd_init_config(args) -> int:
+    """Tworzy settings.yaml dla Tunnel i SEG z parametrów (tryb unattended)."""
+    split = lambda v: [x for x in (v or "").replace(",", " ").split() if x]  # noqa: E731
+    cfg = wizard.build_settings({
+        "mode": args.mode, "interface": args.interface, "name": args.name,
+        "vip": args.vip, "tunnel_vip": args.tunnel_vip, "seg_vip": args.seg_vip,
+        "tunnel": not args.no_tunnel, "seg": not args.no_seg,
+        "tunnel_fqdn": args.tunnel_fqdn, "seg_fqdn": args.seg_fqdn,
+        "tunnel_backends": split(args.tunnel_backends), "seg_backends": split(args.seg_backends),
+        "tunnel_ports": args.tunnel_ports, "seg_ports": args.seg_ports,
+        "health_check": args.health_check, "backend_check": args.backend_check,
+        "firewall_backend": args.firewall, "allowed_sources": split(args.allowed_sources),
+    })
+    text = "# Wygenerowano: omnissa-lb init-config\n" + settings_mod.dump_yaml(cfg)
+    if args.output == "-":
+        sys.stdout.write(text)
+        return 0
+    out = Path(args.output)
+    if out.exists() and not args.force:
+        raise OmnissaError(f"Plik {out} już istnieje (użyj --force, aby nadpisać)", 9)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text)
+    out.chmod(0o640)
+    print(f"Zapisano: {out}", file=sys.stderr)
+    return 0
+
+
 def cmd_validate(args) -> int:
     cfg = _cfg(args)
     print(f"Konfiguracja {args.config} poprawna. Usługi: {', '.join(settings_mod.enabled_services(cfg))}")
@@ -342,6 +369,31 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--base", default=None)
     sp.add_argument("--interface", default=None)
     sp.set_defaults(func=cmd_wizard)
+
+    sp = sub.add_parser("init-config", help="utwórz settings.yaml dla Tunnel i SEG z parametrów (bez pytań)",
+                        description="Przykład: omnissa-lb init-config --vip 10.0.0.50 --tunnel-fqdn tunnel.example.com "
+                                    "--tunnel-backends 10.0.1.11,10.0.1.12 --seg-fqdn seg.example.com "
+                                    "--seg-backends 10.0.1.21,10.0.1.22 --interface ens160 --output settings.yaml")
+    sp.add_argument("--output", default="-", help="plik wynikowy (domyślnie stdout)")
+    sp.add_argument("--force", action="store_true", help="nadpisz istniejący plik")
+    sp.add_argument("--name", default=None, help="nazwa wdrożenia")
+    sp.add_argument("--interface", default=None, help="interfejs VIP (domyślnie auto)")
+    sp.add_argument("--mode", choices=("shared", "dedicated"), default="shared",
+                    help="shared: wspólny VIP (SNI), dedicated: osobne VIP")
+    sp.add_argument("--vip", help="wspólny VIP (mode shared)")
+    sp.add_argument("--tunnel-vip", help="VIP Tunnel (mode dedicated)")
+    sp.add_argument("--seg-vip", help="VIP SEG (mode dedicated)")
+    for svc, label in (("tunnel", "Tunnel"), ("seg", "SEG")):
+        sp.add_argument(f"--{svc}-fqdn", help=f"FQDN {label}")
+        sp.add_argument(f"--{svc}-backends", help=f"backendy {label} (IP/FQDN, przecinki)")
+        sp.add_argument(f"--{svc}-ports", help=f"listenery {label}, np. tcp/443,udp/443")
+        sp.add_argument(f"--no-{svc}", action="store_true", help=f"wyłącz {label}")
+    sp.add_argument("--health-check", choices=("tcp", "http", "https", "none"), default="tcp")
+    sp.add_argument("--backend-check", choices=("critical", "warning", "skip"), default="critical",
+                    help="czy niedostępne backendy/SNI blokują instalację")
+    sp.add_argument("--firewall", choices=("auto", "nftables", "ufw", "none"), default="auto")
+    sp.add_argument("--allowed-sources", default=None, help="sieci źródłowe IPv4 (przecinki)")
+    sp.set_defaults(func=cmd_init_config)
 
     common(sub.add_parser("validate", help="walidacja settings.yaml")).set_defaults(func=cmd_validate)
     sp = common(sub.add_parser("render", help="wygeneruj envoy.yaml"))

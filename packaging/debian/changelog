@@ -4,6 +4,7 @@ omnissa-envoy-lb (1.1.0) unstable; urgency=medium
     wpis /etc/apt/sources.list.d/envoy.list; migracja wpisu deb822 z 1.0.0.
   * Paczka .deb narzędzia (polecenia omnissa-lb, omnissa-lb-install/-update/-uninstall).
   * bind9-dnsutils zamiast pakietu przejściowego dnsutils.
+  * omnissa-lb init-config: tworzenie settings.yaml dla Tunnel i SEG z parametrów.
 
  -- Szymon Frankiewicz <szymonfrankiewicz@gmail.com>  Fri, 30 Oct 2026 14:00:00 +0000
 

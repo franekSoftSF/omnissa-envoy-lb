@@ -43,6 +43,10 @@ cat >"${STAGE}/usr/sbin/omnissa-lb" <<'EOF'
 #!/bin/sh
 # omnissa-lb (pakiet omnissa-envoy-lb)
 if [ ! -x /opt/omnissa-envoy-lb/venv/bin/python3 ]; then
+  # Przed wdrożeniem: tworzenie i walidacja konfiguracji działają na systemowym Pythonie
+  case "${1:-}" in
+    init-config|validate|-h|--help|--version) exec /usr/bin/python3 /opt/omnissa-envoy-lb/omnissa-lb.py "$@" ;;
+  esac
   echo "omnissa-lb: środowisko nie jest jeszcze przygotowane - uruchom: sudo omnissa-lb-install" >&2
   exit 8
 fi
